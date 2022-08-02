@@ -5,6 +5,23 @@ import requests
 from loguru import logger
 
 
+def get_request(result_uri: str) -> bool:
+    def get_request_inner(task_id: str):
+        sleep(0.05)
+        current_result_uri = result_uri + "/" + task_id
+        result_response = requests.get(current_result_uri)
+        if result_response.status_code == 200:
+            status = result_response.json()["status"]
+            if status == "completed":
+                return False
+            else:
+                return True
+        else:
+            logger.error(f"http error code :{result_response.status_code}")
+            logger.error(f"Current task_id: {task_id}")
+            return False
+
+
 def many_request_test(request: Dict, number_of_request: int, max_attempts: int, generate_uri: str, result_uri: str):
     """Many Request API test.
     Many requests to server in very short time
@@ -35,33 +52,18 @@ def many_request_test(request: Dict, number_of_request: int, max_attempts: int, 
 
     logger.info("Request get result start")
     attempt_count = 0
+    get_request_curry = get_request(result_uri)
     while attempt_count < max_attempts:
         if len(task_id_list) == 0:
             break
         attempt_count += 1
         logger.info(f"attempts count : {attempt_count}")
         logger.info(f"left task : {len(task_id_list)}")
-        task_id_idx = 0
-        while task_id_idx < len(task_id_list):
-            sleep(0.05)
-            if len(task_id_list) == 0:
-                break
-            result_uri = result_uri + "/" + task_id_list[task_id_idx]
-            result_response = requests.get(result_uri)
-            if result_response.status_code == 200:
-                status = result_response.json()["status"]
-                if status == "pending":
-                    task_id_idx += 1
-                elif status == "assigned":
-                    task_id_idx += 1
-                else:
-                    del task_id_list[task_id_idx]
-            else:
-                logger.error("http error code :", result_response.status_code)
-                break
+        task_id_list = filter(get_request_curry, task_id_list)
         sleep(3)
     if len(task_id_list) == 0:
         logger.info(f"Test Finished. Execution Time of get method(sec): {time() - request_end}")
     else:
         logger.error(f"Out of attempts. Execution Time of get method(s): {time() - request_end}")
+        logger.error(f"Left task : {len(task_id_list)}")
     logger.info("End Many Request Test")
